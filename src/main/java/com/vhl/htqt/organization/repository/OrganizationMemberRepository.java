@@ -25,4 +25,7 @@ public interface OrganizationMemberRepository extends JpaRepository<Organization
     Optional<OrganizationMember> findByIdAndIsDeletedFalse(Long id);
 
     Optional<OrganizationMember> findByIdAndOrganizationIdAndIsDeletedFalse(Long id, Long organizationId);
+
+    //Kiểm tra tổ chức hiện tại còn member nào chưa bị xóa không.
+    boolean existsByOrganizationIdAndIsDeletedFalse(Long organizationId);
 }

@@ -7,6 +7,7 @@ import com.vhl.htqt.organization.dto.OrganizationResponse;
 import com.vhl.htqt.organization.entity.Organization;
 import com.vhl.htqt.organization.entity.OrganizationType;
 import com.vhl.htqt.organization.repository.OrganizationRepository;
+import com.vhl.htqt.organization.repository.OrganizationMemberRepository;
 import com.vhl.htqt.common.response.PageResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -20,6 +21,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class OrganizationService {
     private final OrganizationRepository organizationRepository;
+
+    private final OrganizationMemberRepository organizationMemberRepository;
 
     public PageResponse<OrganizationResponse> getOrganizationsByType(
             OrganizationType type,
@@ -97,10 +100,8 @@ public class OrganizationService {
             organization.setIsActive(request.getIsActive());
         }
 
-        if (request.getParentId() != null) {
-            Organization parent = findOrganizationById(request.getParentId());
-            organization.setParent(parent);
-        }
+        Organization parent = getAndValidateParentForCreate(type, request.getParentId());
+        organization.setParent(parent);
 
         Organization savedOrganization = organizationRepository.save(organization);
         return toResponse(savedOrganization);
@@ -137,12 +138,8 @@ public class OrganizationService {
             organization.setIsActive(request.getIsActive());
         }
 
-        if (request.getParentId() != null) {
-            Organization parent = findOrganizationById(request.getParentId());
-            organization.setParent(parent);
-        } else {
-            organization.setParent(null);
-        }
+        Organization parent = getAndValidateParentForUpdate(organization, request.getParentId());
+        organization.setParent(parent);
 
         Organization savedOrganization = organizationRepository.save(organization);
         return toResponse(savedOrganization);
@@ -150,6 +147,7 @@ public class OrganizationService {
 
     public void deleteOrganization(Long id) {
         Organization organization = findOrganizationById(id);
+        validateCanDeleteOrganization(organization);
         organization.setIsDeleted(true);
         organizationRepository.save(organization);
     }
@@ -187,5 +185,71 @@ public class OrganizationService {
                 .createdAt(organization.getCreatedAt())
                 .updatedAt(organization.getUpdatedAt())
                 .build();
+    }
+
+    private Organization getAndValidateParentForCreate(
+            OrganizationType type,
+            Long parentId
+    ) {
+        if (parentId == null) {
+            return null;
+        }
+
+        if (type == OrganizationType.EXTERNAL) {
+            throw new BusinessException("Tổ chức đối tác ngoài VHL không được có tổ chức cha");
+        }
+
+        Organization parent = findOrganizationById(parentId);
+
+        if (parent.getType() != OrganizationType.INTERNAL) {
+            throw new BusinessException("Tổ chức cha phải là tổ chức trong VHL");
+        }
+
+        return parent;
+    }
+
+    private Organization getAndValidateParentForUpdate(
+            Organization organization,
+            Long parentId
+    ) {
+        if (parentId == null) {
+            return null;
+        }
+
+        if (organization.getType() == OrganizationType.EXTERNAL) {
+            throw new BusinessException("Tổ chức đối tác ngoài VHL không được có tổ chức cha");
+        }
+
+        if (organization.getId().equals(parentId)) {
+            throw new BusinessException("Tổ chức không được chọn chính nó làm tổ chức cha");
+        }
+
+        Organization parent = findOrganizationById(parentId);
+
+        if (parent.getType() != OrganizationType.INTERNAL) {
+            throw new BusinessException("Tổ chức cha phải là tổ chức trong VHL");
+        }
+
+        return parent;
+    }
+
+    private void validateCanDeleteOrganization(Organization organization) {
+        boolean hasChildren = organizationRepository.existsByParentIdAndIsDeletedFalse(
+                organization.getId()
+        );
+
+        if (hasChildren) {
+            throw new BusinessException("Không thể xóa tổ chức vì vẫn còn tổ chức con");
+        }
+
+        if (organization.getType() == OrganizationType.INTERNAL) {
+            boolean hasMembers = organizationMemberRepository.existsByOrganizationIdAndIsDeletedFalse(
+                    organization.getId()
+            );
+
+            if (hasMembers) {
+                throw new BusinessException("Không thể xóa tổ chức vì vẫn còn thành viên trong tổ chức");
+            }
+        }
     }
 }

@@ -26,4 +26,7 @@ public interface OrganizationRepository extends JpaRepository<Organization, Long
     Optional<Organization> findByIdAndIsDeletedFalse(Long id);
 
     boolean existsByCodeAndTypeAndIsDeletedFalse(String code, OrganizationType type);
+
+    //Kiểm tra tổ chức hiện tại có tổ chức con nào chưa bị xóa không.
+    boolean existsByParentIdAndIsDeletedFalse(Long parentId);
 }
